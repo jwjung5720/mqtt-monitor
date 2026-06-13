@@ -1,0 +1,13 @@
+[Unit]
+Description=MQTT System Monitor Dashboard
+After=network.target mqtt-subscriber.service
+
+[Service]
+User=jiwon
+WorkingDirectory=/home/jiwon/mqtt-monitor
+ExecStart=/usr/bin/python3 dashboard.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

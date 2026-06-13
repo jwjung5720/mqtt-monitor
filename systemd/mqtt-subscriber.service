@@ -1,0 +1,14 @@
+[Unit]
+Description=MQTT Metrics Subscriber (SQLite Writer)
+After=network.target mosquitto.service
+Requires=mosquitto.service
+
+[Service]
+User=jiwon
+WorkingDirectory=/home/jiwon/mqtt-monitor
+ExecStart=/usr/bin/python3 subscriber.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

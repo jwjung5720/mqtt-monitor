@@ -1,0 +1,14 @@
+[Unit]
+Description=MQTT System Metrics Publisher
+After=network.target mosquitto.service
+Requires=mosquitto.service
+
+[Service]
+User=jiwon
+WorkingDirectory=/home/jiwon/mqtt-monitor
+ExecStart=/usr/bin/python3 publisher.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
