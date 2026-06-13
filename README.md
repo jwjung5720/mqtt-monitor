@@ -19,33 +19,7 @@
 
 ## 아키텍처
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                     Linux 미니PC                         │
-│                                                          │
-│  publisher.py                                            │
-│  ┌──────────────┐   MQTT (QoS 1)   ┌─────────────────┐  │
-│  │  psutil      │ ───────────────► │   mosquitto     │  │
-│  │  5초마다 수집 │                  │ localhost:1883  │  │
-│  └──────────────┘                  └────────┬────────┘  │
-│                                             │            │
-│  subscriber.py                              │            │
-│  ┌──────────────┐ ◄────────────────────────┘            │
-│  │  on_message()│   임계값 초과 시                        │
-│  │  → SQLite    │ ──────────────► Discord 웹훅            │
-│  └──────────────┘                                        │
-│         │                                                │
-│  dashboard.py (Flask :5000)                              │
-│  ┌──────────────────────────────┐                        │
-│  │ /api/metrics  → 차트 시각화  │                         │
-│  │ /api/services → systemctl    │                        │
-│  │ /api/tailscale               │                        │
-│  │ /api/system/reboot|shutdown  │                        │
-│  └──────────────────────────────┘                        │
-└─────────────────────────────────────────────────────────┘
-         │
-         └── Tailscale를 통해 어디서든 접속 가능
-```
+<img width="821" height="522" alt="linux_mini_pc_architecture_nofold drawio" src="https://github.com/user-attachments/assets/373bfe02-29e4-450a-bf84-9e3880f8f5cf" />
 
 ---
 
@@ -123,6 +97,12 @@ CPU 사용률이 임계값을 초과했습니다.
 
 archlinux · mqtt-monitor
 ```
+
+---
+
+## 동작 화면
+
+<img width="2509" height="1007" alt="image" src="https://github.com/user-attachments/assets/50ae7b4b-74c4-4591-8ee8-c0b2e1851b56" />
 
 ---
 
