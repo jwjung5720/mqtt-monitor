@@ -19,6 +19,7 @@
 
 ## 아키텍처
 
+<img width="821" height="522" alt="linux_mini_pc_architecture_nofold drawio" src="https://github.com/user-attachments/assets/373bfe02-29e4-450a-bf84-9e3880f8f5cf" />
 
 ---
 
