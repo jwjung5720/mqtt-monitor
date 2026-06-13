@@ -84,6 +84,9 @@ CPU 사용률이 임계값을 초과했습니다.
 
 archlinux · mqtt-monitor
 ```
+---
+## 동작 화면
+<img width="2509" height="1007" alt="image" src="https://github.com/user-attachments/assets/50ae7b4b-74c4-4591-8ee8-c0b2e1851b56" />
 
 ---
 
