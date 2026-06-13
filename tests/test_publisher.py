@@ -1,9 +1,8 @@
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
 import publisher
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 def test_network_bps_first_call_returns_zero():
     publisher._prev_net = None
