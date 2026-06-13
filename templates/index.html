@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Monitor</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f1117; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; font-size: 14px; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; background: #1a1d27; border-bottom: 1px solid #2d3148;
+  }
+  header h1 { font-size: 16px; font-weight: 600; color: #a5b4fc; }
+  #clock { font-size: 13px; color: #64748b; }
+
+  nav { display: flex; gap: 4px; padding: 12px 24px; background: #13151f; border-bottom: 1px solid #1e2235; }
+  nav button {
+    padding: 6px 18px; border: none; border-radius: 6px; cursor: pointer;
+    background: transparent; color: #64748b; font-size: 13px; transition: all .15s;
+  }
+  nav button.active { background: #312e81; color: #a5b4fc; }
+  nav button:hover:not(.active) { background: #1e2235; color: #94a3b8; }
+
+  .tab { display: none; padding: 20px 24px; }
+  .tab.active { display: block; }
+
+  /* 게이지 카드 */
+  .gauges { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+  .card {
+    background: #1a1d27; border: 1px solid #2d3148; border-radius: 10px;
+    padding: 16px; text-align: center;
+  }
+  .card-label { font-size: 11px; color: #64748b; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .5px; }
+  .card-value { font-size: 26px; font-weight: 700; color: #e2e8f0; }
+  .card-unit { font-size: 11px; color: #64748b; margin-top: 2px; }
+  .bar { height: 6px; background: #1e2235; border-radius: 3px; margin-top: 10px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width .4s; }
+
+  /* 차트 */
+  .chart-card {
+    background: #1a1d27; border: 1px solid #2d3148; border-radius: 10px;
+    padding: 16px; margin-bottom: 14px;
+  }
+  .chart-title { font-size: 12px; color: #64748b; margin-bottom: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  .chart-card canvas { max-height: 160px; }
+
+  /* 관리 탭 */
+  .section-title { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; margin-top: 20px; }
+  .section-title:first-child { margin-top: 0; }
+
+  .ctrl-row { display: flex; gap: 10px; margin-bottom: 20px; }
+  .btn {
+    padding: 8px 20px; border: none; border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-weight: 600; transition: opacity .15s;
+  }
+  .btn:hover { opacity: .8; }
+  .btn-danger { background: #7f1d1d; color: #fca5a5; }
+  .btn-warn { background: #78350f; color: #fcd34d; }
+  .btn-sm {
+    padding: 4px 10px; font-size: 12px; border: none; border-radius: 4px;
+    cursor: pointer; font-weight: 500;
+  }
+  .btn-restart { background: #1e3a5f; color: #7dd3fc; }
+  .btn-start   { background: #14532d; color: #86efac; }
+  .btn-stop    { background: #4a1942; color: #f0abfc; }
+
+  /* 서비스 테이블 */
+  table { width: 100%; border-collapse: collapse; background: #1a1d27; border-radius: 10px; overflow: hidden; }
+  th { background: #13151f; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; padding: 10px 14px; text-align: left; }
+  td { padding: 10px 14px; border-top: 1px solid #1e2235; font-size: 13px; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+  .dot-active   { background: #4ade80; }
+  .dot-inactive { background: #64748b; }
+  .dot-unknown  { background: #fbbf24; }
+
+  /* Tailscale */
+  .ts-list { background: #1a1d27; border: 1px solid #2d3148; border-radius: 10px; padding: 4px 0; margin-bottom: 20px; }
+  .ts-item { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-top: 1px solid #1e2235; }
+  .ts-item:first-child { border-top: none; }
+  .ts-host { font-weight: 600; min-width: 150px; }
+  .ts-ip   { color: #94a3b8; min-width: 130px; font-family: monospace; }
+  .ts-os   { color: #64748b; min-width: 70px; }
+  .ts-badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: auto;
+  }
+  .ts-online  { background: #14532d; color: #86efac; }
+  .ts-offline { background: #1e2235; color: #64748b; }
+  .ts-self    { background: #312e81; color: #a5b4fc; }
+
+  #toast {
+    position: fixed; bottom: 24px; right: 24px; padding: 10px 18px;
+    background: #1e2235; border: 1px solid #4ade80; border-radius: 8px;
+    color: #86efac; font-size: 13px; display: none; z-index: 999;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>System Monitor &mdash; <span id="hostname">archlinux</span></h1>
+  <span id="clock"></span>
+</header>
+
+<nav>
+  <button class="active" onclick="switchTab('monitor', this)">모니터링</button>
+  <button onclick="switchTab('manage', this)">관리</button>
+</nav>
+
+<!-- ── 모니터링 탭 ── -->
+<div id="tab-monitor" class="tab active">
+  <div class="gauges">
+    <div class="card">
+      <div class="card-label">CPU 사용률</div>
+      <div class="card-value" id="g-cpu">--</div>
+      <div class="card-unit">%</div>
+      <div class="bar"><div class="bar-fill" id="b-cpu" style="background:#6366f1;width:0%"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-label">CPU 온도</div>
+      <div class="card-value" id="g-temp">--</div>
+      <div class="card-unit">°C</div>
+      <div class="bar"><div class="bar-fill" id="b-temp" style="background:#f59e0b;width:0%"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-label">메모리</div>
+      <div class="card-value" id="g-mem">--</div>
+      <div class="card-unit">%</div>
+      <div class="bar"><div class="bar-fill" id="b-mem" style="background:#10b981;width:0%"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-label">디스크</div>
+      <div class="card-value" id="g-disk">--</div>
+      <div class="card-unit">%</div>
+      <div class="bar"><div class="bar-fill" id="b-disk" style="background:#3b82f6;width:0%"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-label">네트워크</div>
+      <div class="card-value" id="g-net-tx" style="font-size:16px">--</div>
+      <div class="card-unit">↑ TX</div>
+      <div class="card-value" id="g-net-rx" style="font-size:16px;margin-top:6px">--</div>
+      <div class="card-unit">↓ RX</div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">CPU 사용률 / 온도</div>
+    <canvas id="chart-cpu"></canvas>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">메모리 / 디스크</div>
+    <canvas id="chart-mem"></canvas>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">네트워크 <span id="net-iface" style="color:#a5b4fc"></span></div>
+    <canvas id="chart-net"></canvas>
+  </div>
+</div>
+
+<!-- ── 관리 탭 ── -->
+<div id="tab-manage" class="tab">
+  <div class="section-title">Tailscale 연결 기기</div>
+  <div class="ts-list" id="ts-list"><div style="padding:14px;color:#64748b">로딩 중...</div></div>
+
+  <div class="section-title">서비스 관리</div>
+  <table id="svc-table">
+    <thead><tr><th>서비스</th><th>상태</th><th>제어</th></tr></thead>
+    <tbody id="svc-body"><tr><td colspan="3" style="color:#64748b">로딩 중...</td></tr></tbody>
+  </table>
+
+  <div class="section-title" style="margin-top:32px;color:#7f1d1d">시스템 제어</div>
+  <div style="background:#1a1d27;border:1px solid #7f1d1d;border-radius:10px;padding:16px;">
+    <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;">
+      ⚠ 시스템을 재시작하거나 종료하면 <strong>모든 서비스가 중단</strong>됩니다.<br>
+      SSH 세션도 끊어지며, 종료 시 직접 전원을 켜야 합니다.
+    </div>
+    <div class="ctrl-row">
+      <button class="btn btn-warn" onclick="openSysModal('reboot')">재시작</button>
+      <button class="btn btn-danger" onclick="openSysModal('shutdown')">종료</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 시스템 제어 모달 ── -->
+<div id="sys-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#1a1d27;border:1px solid #7f1d1d;border-radius:12px;padding:28px;max-width:380px;width:90%;">
+    <div style="font-size:16px;font-weight:700;color:#fca5a5;margin-bottom:8px;" id="modal-title"></div>
+    <div style="font-size:13px;color:#94a3b8;margin-bottom:20px;" id="modal-desc"></div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:8px;">확인하려면 아래에 <strong style="color:#fca5a5" id="modal-keyword"></strong> 를 입력하세요:</div>
+    <input id="modal-input" type="text" placeholder=""
+      style="width:100%;padding:8px 12px;background:#0f1117;border:1px solid #4a1942;border-radius:6px;color:#e2e8f0;font-size:14px;margin-bottom:16px;outline:none;">
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn" style="background:#1e2235;color:#94a3b8;" onclick="closeSysModal()">취소</button>
+      <button class="btn btn-danger" id="modal-confirm-btn" disabled onclick="execSysAction()" style="opacity:.4;cursor:not-allowed;">실행</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const CHART_POINTS = 120;
+const POLL_MS = 5000;
+
+// ── 차트 초기화 ────────────────────────────────────────────────────────
+const chartDefaults = {
+  type: 'line',
+  options: {
+    animation: false,
+    responsive: true,
+    plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { color: '#475569', maxTicksLimit: 6 }, grid: { color: '#1e2235' } },
+      y: { ticks: { color: '#475569' }, grid: { color: '#1e2235' } },
+    },
+  },
+};
+
+function makeChart(id, datasets, yMax) {
+  const ctx = document.getElementById(id).getContext('2d');
+  const opts = JSON.parse(JSON.stringify(chartDefaults));
+  if (yMax) opts.options.scales.y.max = yMax;
+  return new Chart(ctx, { ...opts, data: { labels: [], datasets } });
+}
+
+const cpuChart = makeChart('chart-cpu', [
+  { label: 'CPU %',    data: [], borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,.1)', fill: true, tension: .3, pointRadius: 0 },
+  { label: '온도 °C', data: [], borderColor: '#f59e0b', backgroundColor: 'transparent', tension: .3, pointRadius: 0 },
+], 100);
+
+const memChart = makeChart('chart-mem', [
+  { label: '메모리 %', data: [], borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.1)', fill: true, tension: .3, pointRadius: 0 },
+  { label: '디스크 %', data: [], borderColor: '#3b82f6', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderDash: [4,2] },
+], 100);
+
+const netChart = makeChart('chart-net', [
+  { label: 'TX MB/s', data: [], borderColor: '#a78bfa', backgroundColor: 'transparent', tension: .3, pointRadius: 0 },
+  { label: 'RX MB/s', data: [], borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.1)', fill: true, tension: .3, pointRadius: 0 },
+]);
+
+function pushChart(chart, label, ...values) {
+  chart.data.labels.push(label);
+  values.forEach((v, i) => chart.data.datasets[i].data.push(v));
+  if (chart.data.labels.length > CHART_POINTS) {
+    chart.data.labels.shift();
+    chart.data.datasets.forEach(d => d.data.shift());
+  }
+  chart.update('none');
+}
+
+// ── 게이지 업데이트 ────────────────────────────────────────────────────
+function fmtBps(bps) {
+  if (bps >= 1e6) return (bps/1e6).toFixed(1) + ' MB/s';
+  if (bps >= 1e3) return (bps/1e3).toFixed(0) + ' KB/s';
+  return bps + ' B/s';
+}
+
+function barColor(pct) {
+  if (pct > 85) return '#ef4444';
+  if (pct > 65) return '#f59e0b';
+  return null;
+}
+
+function setGauge(id, bid, val, pct, color) {
+  document.getElementById(id).textContent = val ?? '--';
+  if (bid && pct != null) {
+    const bar = document.getElementById(bid);
+    bar.style.width = Math.min(pct, 100) + '%';
+    const c = barColor(pct);
+    if (c) bar.style.background = c;
+    else bar.style.background = color;
+  }
+}
+
+// ── 폴링 ──────────────────────────────────────────────────────────────
+async function pollMetrics() {
+  try {
+    const [cpu, temp, mem, disk, net] = await Promise.all([
+      fetch('/api/metrics?topic=system/cpu/usage&limit=120').then(r => r.json()),
+      fetch('/api/metrics?topic=system/cpu/temp&limit=120').then(r => r.json()),
+      fetch('/api/metrics?topic=system/memory&limit=120').then(r => r.json()),
+      fetch('/api/metrics?topic=system/disk&limit=120').then(r => r.json()),
+      fetch('/api/metrics?topic=system/network&limit=120').then(r => r.json()),
+    ]);
+
+    // 최신값 게이지
+    const last = arr => arr.length ? arr[arr.length - 1] : null;
+    const lc = last(cpu), lt = last(temp), lm = last(mem), ld = last(disk), ln = last(net);
+
+    if (lc) setGauge('g-cpu',  'b-cpu',  parseFloat(lc.value).toFixed(1), lc.value,  '#6366f1');
+    if (lt) setGauge('g-temp', 'b-temp', lt.value != null ? parseFloat(lt.value).toFixed(1) : '--', lt.value ? lt.value/100*100 : 0, '#f59e0b');
+    if (lm) setGauge('g-mem',  'b-mem',  parseFloat(lm.value).toFixed(1), lm.value,  '#10b981');
+    if (ld) setGauge('g-disk', 'b-disk', parseFloat(ld.value).toFixed(1), ld.value,  '#3b82f6');
+    if (ln) {
+      document.getElementById('g-net-tx').textContent = fmtBps(ln.tx_bps ?? 0);
+      document.getElementById('g-net-rx').textContent = fmtBps(ln.rx_bps ?? 0);
+      if (ln.iface) document.getElementById('net-iface').textContent = '(' + ln.iface + ')';
+    }
+
+    // 차트 — 전체 데이터셋 갱신
+    function rebuildChart(chart, arr, ...extractors) {
+      chart.data.labels = arr.map(r => r.timestamp.slice(11, 19));
+      extractors.forEach((fn, i) => chart.data.datasets[i].data = arr.map(fn));
+      chart.update('none');
+    }
+
+    rebuildChart(cpuChart, cpu.map((r, i) => ({ ...r, temp: temp[i]?.value })),
+      r => r.value,
+      r => r.temp,
+    );
+    rebuildChart(memChart, mem.map((r, i) => ({ ...r, disk: disk[i]?.value })),
+      r => r.value,
+      r => r.disk,
+    );
+    rebuildChart(netChart, net,
+      r => r.tx_bps != null ? (r.tx_bps / 1e6).toFixed(3) : null,
+      r => r.rx_bps != null ? (r.rx_bps / 1e6).toFixed(3) : null,
+    );
+
+  } catch(e) { console.error('metrics poll error', e); }
+}
+
+// ── 관리 탭 ───────────────────────────────────────────────────────────
+async function loadManage() {
+  loadTailscale();
+  loadServices();
+}
+
+async function loadTailscale() {
+  const list = document.getElementById('ts-list');
+  try {
+    const peers = await fetch('/api/tailscale').then(r => r.json());
+    if (peers.error) { list.innerHTML = `<div style="padding:14px;color:#ef4444">${peers.error}</div>`; return; }
+    list.innerHTML = peers.map(p => `
+      <div class="ts-item">
+        <span class="dot ${p.online ? 'dot-active' : 'dot-inactive'}"></span>
+        <span class="ts-host">${p.hostname}</span>
+        <span class="ts-ip">${p.ip}</span>
+        <span class="ts-os">${p.os}</span>
+        ${p.self
+          ? '<span class="ts-badge ts-self">this machine</span>'
+          : p.online
+            ? '<span class="ts-badge ts-online">online</span>'
+            : `<span class="ts-badge ts-offline">${p.last_seen ? 'offline' : 'offline'}</span>`
+        }
+      </div>
+    `).join('');
+  } catch(e) { list.innerHTML = '<div style="padding:14px;color:#ef4444">오류</div>'; }
+}
+
+async function loadServices() {
+  const body = document.getElementById('svc-body');
+  try {
+    const services = await fetch('/api/services').then(r => r.json());
+    body.innerHTML = services.map(s => {
+      const isDocker  = s.type === 'docker';
+      const isActive  = isDocker ? s.status === 'running' : s.status === 'active';
+      const isStopped = isDocker ? ['exited','created','dead','not found'].includes(s.status) : s.status === 'inactive';
+      const dotCls    = isActive ? 'dot-active' : isStopped ? 'dot-inactive' : 'dot-unknown';
+      const label     = isActive ? '실행 중' : isStopped ? '중지' : s.status;
+      const typeBadge = isDocker
+        ? '<span style="font-size:10px;background:#1e3a5f;color:#7dd3fc;padding:1px 6px;border-radius:4px;margin-right:6px">Docker</span>'
+        : '';
+      const isSSH     = s.name === 'sshd';
+      const ctrlHtml  = isActive
+        ? `${isSSH ? '<span style="font-size:11px;color:#f59e0b;margin-right:6px">⚠ SSH</span>' : ''}
+           <button class="btn-sm btn-restart" onclick="svcAction('${s.name}','restart')">재시작</button>
+           <button class="btn-sm btn-stop"    onclick="svcAction('${s.name}','stop')">중지</button>`
+        : `<button class="btn-sm btn-start" onclick="svcAction('${s.name}','start')">시작</button>`;
+      return `<tr><td>${typeBadge}${s.name}</td><td><span class="dot ${dotCls}"></span>${label}</td><td style="display:flex;gap:6px;align-items:center">${ctrlHtml}</td></tr>`;
+    }).join('');
+  } catch(e) { body.innerHTML = '<tr><td colspan="3" style="color:#ef4444">오류</td></tr>'; }
+}
+
+async function svcAction(name, action) {
+  showToast(`${name} ${action} 중...`);
+  try {
+    const r = await fetch(`/api/services/${name}/${action}`, { method: 'POST' }).then(r => r.json());
+    showToast(r.ok ? `${name} ${action} 완료` : `실패: ${r.output}`);
+    setTimeout(loadServices, 1500);
+  } catch(e) { showToast('오류 발생'); }
+}
+
+let _sysAction = null;
+
+function openSysModal(action) {
+  _sysAction = action;
+  const isReboot = action === 'reboot';
+  const keyword  = isReboot ? '재시작' : '종료';
+  document.getElementById('modal-title').textContent = `시스템 ${keyword}`;
+  document.getElementById('modal-desc').textContent  = isReboot
+    ? '시스템을 재시작합니다. 모든 서비스가 잠시 중단됩니다.'
+    : '시스템을 종료합니다. 직접 전원을 켜야 다시 접속할 수 있습니다.';
+  document.getElementById('modal-keyword').textContent = keyword;
+  const input = document.getElementById('modal-input');
+  input.value = '';
+  input.placeholder = keyword + ' 입력';
+  const btn = document.getElementById('modal-confirm-btn');
+  btn.disabled = true;
+  btn.style.opacity = '.4';
+  btn.style.cursor  = 'not-allowed';
+  input.oninput = () => {
+    const match = input.value.trim() === keyword;
+    btn.disabled      = !match;
+    btn.style.opacity = match ? '1' : '.4';
+    btn.style.cursor  = match ? 'pointer' : 'not-allowed';
+  };
+  const modal = document.getElementById('sys-modal');
+  modal.style.display = 'flex';
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeSysModal() {
+  document.getElementById('sys-modal').style.display = 'none';
+  _sysAction = null;
+}
+
+async function execSysAction() {
+  if (!_sysAction) return;
+  closeSysModal();
+  await fetch(`/api/system/${_sysAction}`, { method: 'POST' });
+  showToast(`시스템 ${_sysAction === 'reboot' ? '재시작' : '종료'} 명령 전송됨`);
+}
+
+// ── 탭 전환 ────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'manage') loadManage();
+}
+
+// ── 시계 ──────────────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleString('ko-KR');
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────
+let _toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.style.display = 'none', 2500);
+}
+
+document.getElementById('sys-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeSysModal();
+});
+
+// ── 시작 ──────────────────────────────────────────────────────────────
+updateClock();
+setInterval(updateClock, 1000);
+pollMetrics();
+setInterval(pollMetrics, POLL_MS);
+</script>
+</body>
+</html>
